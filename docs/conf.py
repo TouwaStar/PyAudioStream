@@ -18,8 +18,8 @@ sys.path.insert(0, os.path.abspath('../PyAudioStream'))
 # -- Project information -----------------------------------------------------
 
 project = 'PyAudioStream'
-copyright = '2020, Mateusz Siłaczewski'
-author = 'Mateusz Siłaczewski'
+copyright = '2020, TouwaStar'
+author = 'TouwaStar'
 
 # The full version, including alpha/beta/rc tags
 release = '0.1'
