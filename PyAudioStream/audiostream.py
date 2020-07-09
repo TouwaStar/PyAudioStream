@@ -63,7 +63,8 @@ class AudioProperties:
         self.sampling = sampling
         self.channels = channels
 
-        assert length or frames_in_audio
+        if not length and not frames_in_audio:
+            raise AssertionError("Length or frames_in_audio must be provided")
         if length and frames_in_audio:
             self.length = length
             self.frames_in_audio = frames_in_audio
@@ -107,8 +108,8 @@ class AudioProperties:
                 channels = int(byte_message[len(AudioProperties._CHANNELS):].decode('utf-8'))
             if AudioProperties._LENGTH in byte_message:
                 length = int(byte_message[len(AudioProperties._LENGTH):].decode('utf-8'))
-            if AudioProperties._SAMPLING_RATE in byte_message:
-                frames_in_audio = int(byte_message[len(AudioProperties._SAMPLING_RATE):].decode('utf-8'))
+            if AudioProperties._FRAMES_IN_AUDIO in byte_message:
+                frames_in_audio = int(byte_message[len(AudioProperties._FRAMES_IN_AUDIO):].decode('utf-8'))
         return AudioProperties(sampling=sampling_rate, channels=channels, length=length, frames_in_audio=frames_in_audio)
 
 
@@ -137,7 +138,7 @@ class AudioStreamClient:
       :func:`~audiostream.AudioStreamClient.play_streamed_data` methods which can be overriden.
      """
     def __init__(self):
-        self.__socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         """ Needed to save them for auto reconnection """
         self.__host = None
@@ -187,7 +188,7 @@ class AudioStreamClient:
         """
         logging.info(f'Connecting to {host}:{port}')
         try:
-            self.__socket.connect((host, port))
+            self._socket.connect((host, port))
         except ConnectionRefusedError:
             logging.error(f"Couldn't connect to server, make sure it's running before connecting")
             raise
@@ -198,7 +199,7 @@ class AudioStreamClient:
     def close(self) -> None:
         """ Closes the socket, no need to notify server of the event.
         """
-        self.__socket.close()
+        self._socket.close()
 
     def _read_message(self, data_size: int = 1024) -> List[bytes]:
         """ Retrieves the specified number of bytes from the socket and returns a list of decomposed messages.
@@ -207,25 +208,29 @@ class AudioStreamClient:
         :param data_size: number of bytes read from socket
         :return: list of decomposed messages from the read socket bytes
         """
-        message = self.__socket.recv(data_size)
+        message = self._socket.recv(data_size)
         return _decompose_message(message)
 
-    def _send_message(self, message_type: bytes, message_command: bytes, audio_file: Optional[str] = None) -> None:
-        """ Sends a :class:`audiostream.MessageCommand` of the specified :class:`audiostream.MessageType` with an
-        optional associated audio file name to the server. Should not be called directly.
+    def _send_message(self, message_type: bytes, message_command: Optional[bytes] = None, audio_file: Optional[str] = None) -> None:
+        """ Sends a :class:`audiostream.MessageCommand` of the specified :class:`audiostream.MessageType` or
+         associated with specified audio file to the server. Should not be called directly.
 
         :param message_type: attribute from the :class:`audiostream.MessageType` class
-        :param message_command: attribute from the :class:`audiostream.MessageCommand` class
+        :param message_command:  optional attribute from the :class:`audiostream.MessageCommand` class
         :param audio_file: optional name of the audio file associated with the request
         """
-        message = message_type + message_command
+        if not message_command and not audio_file:
+            raise AssertionError("Can't send a message using only its type")
+        message = message_type
+        if message_command:
+            message += message_command
         if audio_file:
             if type(audio_file) is not bytes:
                 audio_file = audio_file.encode('utf-8')
             message += b'_' + audio_file
         message = _compose_message(message)
         logging.info(f"Sending message to server {message}")
-        self.__socket.send(message)
+        self._socket.send(message)
 
     def _request_feature(self, command: bytes, audio_file: Optional[str] = None, size: int = 1024) -> List[bytes]:
         """ Requests a feature from the client specified by the :class:`audiostream.MessageCommand` class and
@@ -237,7 +242,7 @@ class AudioStreamClient:
         :param size: expected size of the response message
         :return: decomposed server response
         """
-        self._send_message(MessageType.GIVE, command, audio_file)
+        self._send_message(MessageType.GIVE, message_command=command, audio_file=audio_file)
         return self._await_messages(size)
 
     def _await_messages(self, size: int = 1024) -> List[bytes]:
@@ -247,9 +252,9 @@ class AudioStreamClient:
         :param size: size of the incoming message
         :return: list of decomposed messages
         """
-        self.__socket.setblocking(True)
+        self._socket.setblocking(True)
         messages_retrieved = self._read_message(size)
-        self.__socket.setblocking(False)
+        self._socket.setblocking(False)
         return messages_retrieved
 
     def retrieve_audio_files_list(self) -> List[str]:
@@ -257,7 +262,7 @@ class AudioStreamClient:
         :return: list of audio files
         """
         logging.info("Requesting audio files from server")
-        self._send_message(MessageType.GIVE, MessageCommand.AUDIOFILESLIST)
+        self._send_message(MessageType.GIVE, message_command=MessageCommand.AUDIOFILESLIST)
         audio_file_list = []
         while True:
             try:
@@ -279,7 +284,7 @@ class AudioStreamClient:
 
         :return: audio properties of the requested audio file
         """
-        byte_properties = self._request_feature(MessageCommand.AUDIO_PROPERTIES, audio_file)
+        byte_properties = self._request_feature(MessageCommand.AUDIO_PROPERTIES, audio_file=audio_file)
         return AudioProperties.from_bytes_message(byte_properties)
 
     def start_audio_stream(self, audio_file: str) -> None:
@@ -291,7 +296,7 @@ class AudioStreamClient:
         :param audio_file: the audio file which we want to start the stream for
         :type audio_file: str
         """
-        self._send_message(MessageType.STREAM, audio_file)
+        self._send_message(MessageType.STREAM, audio_file=audio_file)
         self._stream_message_size = int(self._await_messages()[0].decode('utf-8'))
         logging.info(f"Received stream message size {self._stream_message_size}")
 
