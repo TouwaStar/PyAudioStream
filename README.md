@@ -1,5 +1,3 @@
-# WORK IN PROGRESS, NOT PUBLISHED YET
-
 # PyAudioStream
 A library allowing for streaming and playback of audio files from server to client over a socket connection.
 

@@ -41,7 +41,6 @@ class ExampleServer(AudioStreamServer):
 
     def _prepare_frames_list(self, frames_array):
         ready_frames = []
-        logging.info(f"Frames to send {frames_array}")
         for frame in frames_array:
             for frame_for_channel in frame:
                 ready_frames.append(int(frame_for_channel))
@@ -70,11 +69,8 @@ def main():
 
     while True:
         for client, addr in server.get_connected_clients():
-            print(f"Checking for messages from {addr}")
             currently_streaming_clients = server.get_currently_streaming_clients()
-            print(f"Currently streaming clients {currently_streaming_clients}")
             if addr in currently_streaming_clients:
-                print(f"{addr} is currently streaming, skipping")
                 continue
             message = server.retrieve_message_from_client(client)
             if not message:

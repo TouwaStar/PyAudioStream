@@ -126,7 +126,7 @@ class MessageType:
 
 class MessageCommand:
     """ Class determining possible extensions of basic message types """
-    AUDIO_PROPERTIES = b'AUDIO_PROPERTIES'
+    AUDIO_PROPERTIES = b'AUDIO_PROPERTIES_'
     AUDIOFILESLIST = b'AUDIO_FILES_LIST'
 
 
@@ -164,7 +164,7 @@ class AudioStreamClient:
                                            rate=audio_properties.sampling,
                                            output=True)
 
-    def play_streamed_data(self, audio_frames: List[int]) -> None:
+    def play_streamed_data(self, audio_frames: List[bytes]) -> None:
         """ Method for playing the audio based on provided audio frame,
         should be overridden along with :func:`~audiostream.AudioStreamClient.play_streamed_data`
         if custom audio playback is created.
@@ -174,7 +174,7 @@ class AudioStreamClient:
         """
         intel = array.array('l')
         for audio_frame in audio_frames:
-            intel.append(audio_frame)
+            intel.append(int(audio_frame))
         self._stream.write(intel.tobytes())
 
     def connect(self, host: str, port: int) -> None:
@@ -227,7 +227,7 @@ class AudioStreamClient:
         if audio_file:
             if type(audio_file) is not bytes:
                 audio_file = audio_file.encode('utf-8')
-            message += b'_' + audio_file
+            message += audio_file
         message = _compose_message(message)
         logging.info(f"Sending message to server {message}")
         self._socket.send(message)
@@ -300,7 +300,7 @@ class AudioStreamClient:
         self._stream_message_size = int(self._await_messages()[0].decode('utf-8'))
         logging.info(f"Received stream message size {self._stream_message_size}")
 
-    def retrieve_audio_stream(self):
+    def retrieve_audio_stream(self) -> Union[List[bytes], None]:
         """ Should be called in a loop to retrieve the audio frames to stream,
          will return None if no data is ready for retrieval. """
         try:
@@ -394,6 +394,8 @@ class AudioStreamServer:
         """
         message = self._sanitize_message(message)
         logging.info(f"Sending message to client {message}")
+
+        print(_compose_message(message))
         client.send(_compose_message(message))
 
     def send_audio_files_list_to_client(self, client: socket.socket, audio_files_list: List[str]) -> None:
@@ -423,7 +425,8 @@ class AudioStreamServer:
             if message.startswith(MessageCommand.AUDIOFILESLIST, len(_type)):
                 _command = MessageCommand.AUDIOFILESLIST
         if _command and _command is not MessageCommand.AUDIOFILESLIST:
-            _audio_file = message[len(_type)+len(_command) + 1:].decode('utf-8')
+            if len(message) != len(_type) + len(_command):
+                _audio_file = message[len(_type)+len(_command):].decode('utf-8')
 
         return _type, _command, _audio_file
 
@@ -441,9 +444,9 @@ class AudioStreamServer:
         """
         try:
             client.setblocking(True)
-            counter = 1
+            counter = 0
             frames_message = b''
-            msg_size = frames_in_message * len(_MSG_PREFIX + b'2147483647' + _MSG_SUFIX) + frames_in_message
+            msg_size = frames_in_message * len(_MSG_PREFIX + b'-2147483647' + _MSG_SUFIX)
             logging.info(f"Message size {msg_size}")
             client.send(_compose_message(b'%d' % msg_size))
 
@@ -513,6 +516,7 @@ class AudioStreamServer:
         for audio_property in audio_properties.to_bytes_message():
             sanitized_message = self._sanitize_message(audio_property)
             properties_message += _compose_message(sanitized_message)
+
         client.send(properties_message)
 
     def retrieve_message_from_client(self, client: socket.socket, message_size_buff=1024) -> Optional[List[bytes]]:
@@ -528,6 +532,7 @@ class AudioStreamServer:
         """
         try:
             message = client.recv(message_size_buff)
+            print(message)
         except socket.error:
             return None
         if message:
