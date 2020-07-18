@@ -3,6 +3,14 @@ A library allowing for streaming and playback of audio files from server to clie
 
 ## Usage
 Working demo is provided in the Examples folder.
+For a quick check of installation you can perform:
+```
+from PyAudioStream import audiostream
+
+test = audiostream.AudioStreamServer()
+
+test.create_server('127.0.0.1', 8889)
+```
 ### Server
 
 Create a server and start accepting new connections
