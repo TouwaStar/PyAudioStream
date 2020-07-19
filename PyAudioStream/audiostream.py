@@ -172,7 +172,7 @@ class AudioStreamClient:
         :param audio_frames: a list of audio frames each containing one discrete time step in the audio file.
         :type audio_frames: list
         """
-        intel = array.array('l')
+        intel = array.array('i')
         for audio_frame in audio_frames:
             intel.append(int(audio_frame))
         self._stream.write(intel.tobytes())
@@ -376,11 +376,11 @@ class AudioStreamServer:
         :return: bytes which can be composed into a message for sending over the socket
         """
         if type(message) is int:
-            message = b'%d' % message
+            return b'%d' % message
         if type(message) is float:
-            message = b'%f' % message
+            return b'%f' % message
         if type(message) is str:
-            message = message.encode('utf-8')
+            return message.encode('utf-8')
         if type(message) is not bytes:
             raise TypeError(f"Messages sent can only be of type bytes, int or float. Got {type(message)}")
         return message
@@ -430,7 +430,7 @@ class AudioStreamServer:
 
         return _type, _command, _audio_file
 
-    def _stream_audio_frames_to_client(self, client: socket.socket, frames: List[int], frames_in_message: int = 100) -> None:
+    def _stream_audio_frames_to_client(self, client: socket.socket, frames: List[int], frames_in_message: int = 80000) -> None:
         """ Streams the audio frames to the provided client in a loop until all frames are sent or client disconnects,
          for the time of streaming the audio frames no other messages should be sent to client,
          sends the :class:`audiostream.MessageType.ENDOFAUDIOFILE` after all frames have been sent.
@@ -449,20 +449,25 @@ class AudioStreamServer:
             msg_size = frames_in_message * len(_MSG_PREFIX + b'-2147483647' + _MSG_SUFIX)
             logging.info(f"Message size {msg_size}")
             client.send(_compose_message(b'%d' % msg_size))
-
+            frames_messages = []
             for frame in frames:
                 counter += 1
                 sanitized_frame = self._sanitize_message(frame)
-                frames_message += _compose_message(sanitized_frame)
+                frames_messages.append(_compose_message(sanitized_frame))
                 if counter >= frames_in_message:
                     counter = 1
                     fillout = msg_size - len(frames_message)
-                    frames_message += b'0' * fillout
-                    print(frames_message)
+                    frames_messages.append(b'0' * fillout)
+                    frames_message = frames_message.join(frames_messages)
                     client.send(frames_message)
                     frames_message = b''
+                    frames_messages = []
+
+
             self._send_message_to_client(client, MessageType.ENDOFAUDIOFILE)
             client.setblocking(False)
+            print("All audio frames sent")
+            logging.info("All audio frames have been sent")
         except ConnectionResetError:
             logging.info(f"Connection has been closed by client {client.getsockname()}")
 
@@ -514,10 +519,13 @@ class AudioStreamServer:
         :param audio_properties: instance of :class:`audiostream.AudioProperties` class which will be sent to the user
         """
         properties_message = b''
+        test = audio_properties.to_bytes_message()
         for audio_property in audio_properties.to_bytes_message():
             sanitized_message = self._sanitize_message(audio_property)
             properties_message += _compose_message(sanitized_message)
 
+        self.audio_client = AudioStreamClient()
+        self.audio_client.initialize_audio_playback(AudioProperties.from_bytes_message(test))
         client.send(properties_message)
 
     def retrieve_message_from_client(self, client: socket.socket, message_size_buff=1024) -> Optional[List[bytes]]:

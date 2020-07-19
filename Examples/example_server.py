@@ -2,6 +2,7 @@ import sys
 import os
 import soundfile
 import logging
+import time
 
 from PyAudioStream.audiostream import AudioStreamServer, AudioProperties, MessageType, MessageCommand
 
@@ -68,6 +69,7 @@ def main():
     server.accept_new_connections()
 
     while True:
+        time.sleep(0.5)
         for client, addr in server.get_connected_clients():
             currently_streaming_clients = server.get_currently_streaming_clients()
             if addr in currently_streaming_clients:
