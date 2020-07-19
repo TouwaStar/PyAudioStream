@@ -519,13 +519,10 @@ class AudioStreamServer:
         :param audio_properties: instance of :class:`audiostream.AudioProperties` class which will be sent to the user
         """
         properties_message = b''
-        test = audio_properties.to_bytes_message()
         for audio_property in audio_properties.to_bytes_message():
             sanitized_message = self._sanitize_message(audio_property)
             properties_message += _compose_message(sanitized_message)
 
-        self.audio_client = AudioStreamClient()
-        self.audio_client.initialize_audio_playback(AudioProperties.from_bytes_message(test))
         client.send(properties_message)
 
     def retrieve_message_from_client(self, client: socket.socket, message_size_buff=1024) -> Optional[List[bytes]]:
