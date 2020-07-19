@@ -458,6 +458,7 @@ class AudioStreamServer:
                     counter = 1
                     fillout = msg_size - len(frames_message)
                     frames_message += b'0' * fillout
+                    print(frames_message)
                     client.send(frames_message)
                     frames_message = b''
             self._send_message_to_client(client, MessageType.ENDOFAUDIOFILE)
